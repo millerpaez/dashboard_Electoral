@@ -110,7 +110,7 @@ def create_charts(df_filtered, selected_ciudades, selected_lideres):
 # ========== DASHBOARD ==========
 st.set_page_config(page_title="Dashboard Electoral", layout="wide")
 
-st.title("Dashboard Electoral - Miller Paez")
+st.title("Dashboard Electoral")
 st.markdown("**Analisis de cumplimiento electoral**")
 
 try:
