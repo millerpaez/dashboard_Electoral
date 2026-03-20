@@ -3,14 +3,19 @@ import streamlit as st
 import plotly.express as px
 import numpy as np
 import re
+import gspread
+from google.oauth2.service_account import Credentials
 
 @st.cache_data
-def load_data(file_path):
-    df = pd.read_excel(file_path, sheet_name='Consolidado global nuevo')
+def load_data():
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    )
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key("1OjsW5-Kd39c23no6NBdNJiQXsQngQ3yncyBUAlcK7AA").worksheet("Consolidado global nuevo")
+    df = pd.DataFrame(sheet.get_all_records())
 
-    print("Columnas:", df.columns.tolist())
-
-    # Copiar DataFrame para evitar warnings de dtype
     df = df.copy()
 
     # Cedula: columna 0 ('-')
@@ -37,8 +42,6 @@ def load_data(file_path):
 
     # Metrica condicionado solo si cumplio
     df['condicionado_si_cumplio'] = np.where(df['cumplio'] == 1, df['Condicionado'], 0)
-
-    print(f"Datos: {len(df)} registros | Lideres: {df['lider'].nunique()} | Ciudades: {df['ciudad'].nunique()}")
 
     return df
 
@@ -114,9 +117,9 @@ st.title("Dashboard Electoral")
 st.markdown("**Analisis de cumplimiento electoral**")
 
 try:
-    df = load_data('consolidado.xlsx')
-except:
-    st.error("consolidado.xlsx no encontrado")
+    df = load_data()
+except Exception as e:
+    st.error(f"Error al cargar datos: {e}")
     st.stop()
 
 # Filtros

@@ -3,3 +3,5 @@ pandas
 plotly
 numpy
 openpyxl
+gspread
+google-auth
