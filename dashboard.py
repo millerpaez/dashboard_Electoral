@@ -140,7 +140,7 @@ metrics = calculate_metrics(df_filtered)
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Total", metrics['total'])
 col2.metric("Cumplieron", metrics['cumplidos'], f"{metrics['pct_cumplidos']}%")
-col3.metric("No Cumplieron", metrics['no_cumplidos'], f"{metrics['pct_no_cumplidos']}%")
+col3.metric("No Cumplieron", metrics['no_cumplidos'], f"-{metrics['pct_no_cumplidos']}%")
 col4.metric("Sin Procesar", metrics['sin_procesar'])
 
 col5, col6 = st.columns(2)
