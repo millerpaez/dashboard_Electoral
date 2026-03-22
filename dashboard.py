@@ -6,13 +6,18 @@ import re
 import gspread
 from google.oauth2.service_account import Credentials
 
-def load_data():
+def get_sheet_names():
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
         scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     )
     client = gspread.authorize(creds)
-    sheet = client.open_by_key("1OjsW5-Kd39c23no6NBdNJiQXsQngQ3yncyBUAlcK7AA").worksheet("Consolidado global nuevo")
+    spreadsheet = client.open_by_key("1OjsW5-Kd39c23no6NBdNJiQXsQngQ3yncyBUAlcK7AA")
+    return [ws.title for ws in spreadsheet.worksheets()], spreadsheet
+
+def load_data(sheet_name):
+    _, spreadsheet = get_sheet_names()
+    sheet = spreadsheet.worksheet(sheet_name)
     df = pd.DataFrame(sheet.get_all_records())
 
     df = df.copy()
@@ -23,7 +28,15 @@ def load_data():
     # Lider: columna 'lider' - normalizar espacios multiples
     lider_col = df.columns.get_loc('lider')
     df['lider'] = df.iloc[:, lider_col].astype(str).str.strip()
-    df['lider'] = df['lider'].apply(lambda x: re.sub(r'\s+', ' ', x))  # Normalizar espacios multiples a uno solo
+    df['lider'] = df['lider'].apply(lambda x: re.sub(r'\s+', ' ', x))
+
+    # Sub_lider: si existe, normalizar y usar como filtro de lideres
+    if 'sub_lider' in df.columns:
+        df['sub_lider'] = df['sub_lider'].astype(str).str.strip()
+        df['sub_lider'] = df['sub_lider'].apply(lambda x: re.sub(r'\s+', ' ', x))
+        df['lider_filtro'] = df['sub_lider']
+    else:
+        df['lider_filtro'] = df['lider']
 
     # Ciudad: columna 'mun_votacion'
     ciudad_col = df.columns.get_loc('mun_votacion')
@@ -46,13 +59,10 @@ def load_data():
 
 def filter_data(df, selected_ciudades, selected_lideres):
     filtered = df.copy()
-
     if selected_ciudades:
         filtered = filtered[filtered['ciudad'].isin(selected_ciudades)]
-
     if selected_lideres:
-        filtered = filtered[filtered['lider'].isin(selected_lideres)]
-
+        filtered = filtered[filtered['lider_filtro'].isin(selected_lideres)]
     return filtered
 
 def calculate_metrics(df_filtered):
@@ -97,9 +107,9 @@ def create_charts(df_filtered, selected_ciudades, selected_lideres):
     )
 
     if selected_ciudades and not selected_lideres:
-        bar_data = df_filtered[df_filtered['cumplio'] != -1].groupby('lider')['cumplio'].agg(['sum', 'count']).reset_index()
+        bar_data = df_filtered[df_filtered['cumplio'] != -1].groupby('lider_filtro')['cumplio'].agg(['sum', 'count']).reset_index()
         bar_data['pct'] = (bar_data['sum'] / bar_data['count']) * 100
-        fig3 = px.bar(bar_data, x='lider', y='pct', title='Cumplimiento por Lider', color='pct', color_continuous_scale='RdYlGn')
+        fig3 = px.bar(bar_data, x='lider_filtro', y='pct', title='Cumplimiento por Lider', color='pct', color_continuous_scale='RdYlGn')
     elif selected_lideres and not selected_ciudades:
         bar_data = df_filtered[df_filtered['cumplio'] != -1].groupby('ciudad')['cumplio'].agg(['sum', 'count']).reset_index()
         bar_data['pct'] = (bar_data['sum'] / bar_data['count']) * 100
@@ -116,18 +126,28 @@ st.title("Dashboard Electoral")
 st.markdown("**Analisis de cumplimiento electoral**")
 
 try:
-    df = load_data()
+    sheet_names, _ = get_sheet_names()
+except Exception as e:
+    st.error(f"Error al conectar con Google Sheets: {e}")
+    st.stop()
+
+# Selector de hoja
+st.sidebar.header("Filtros")
+selected_sheet = st.sidebar.selectbox("Hoja", sheet_names)
+
+try:
+    df = load_data(selected_sheet)
 except Exception as e:
     st.error(f"Error al cargar datos: {e}")
     st.stop()
 
 # Filtros
-st.sidebar.header("Filtros")
 ciudades = sorted(df['ciudad'].dropna().unique())
-lideres = sorted(df['lider'].dropna().unique())
+lider_label = "Sub-Lideres" if 'sub_lider' in df.columns else "Lideres"
+lideres = sorted(df['lider_filtro'].dropna().unique())
 
 selected_ciudades = st.sidebar.multiselect("Ciudades", ciudades)
-selected_lideres = st.sidebar.multiselect("Lideres", lideres)
+selected_lideres = st.sidebar.multiselect(lider_label, lideres)
 
 if st.sidebar.button("Actualizar", type="primary"):
     st.cache_data.clear()
